@@ -1,63 +1,62 @@
 #!/usr/bin/env python3
-"""news-image-20261120 entrypoint.
+"""news-image-20261120 — entry point.
 
-Reads the front-page PNG stored next to this file and writes it out
-unchanged to the output folder. The picture sums up Friday
-20 November 2026: Cyclone Akvan's landfall in India, the
-Trump-Xi-Putin Peace Declaration from Shenzhen, the ICJ ruling
-that Myanmar committed genocide against the Rohingya, and
-28 more stories from the day.
+The picture for Friday 20 November 2026, "THE WORLD IN ONE PAGE",
+is stored next to this file as entry.png (drawn fresh in this
+session by build_image.py: Cyclone Akvan's landfall, the Trump-Xi-
+Putin peace declaration from Shenzhen, the ICJ's 9-6 genocide
+ruling on Myanmar, and 27 more stories from the day).
 
-Pure standard library, no network, no randomness: two runs
-produce byte-identical output.
+This program does one thing: copy that PNG to the output folder
+unchanged. Standard library only, no network, no randomness, no
+arguments — two runs write byte-identical files.
+
+Usage:
+    MAKEFUN_OUTPUT_DIR=out python3 main.py
 """
+import hashlib
 import os
 import sys
-from hashlib import sha256
 from pathlib import Path
 
-PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
-MAX_BYTES = 1_048_576
-MAX_SIDE = 1024
+SOURCE = Path(__file__).resolve().parent / "entry.png"
+LIMIT_BYTES = 1_048_576
+LIMIT_SIDE = 1024
+SIGNATURE = b"\x89PNG\r\n\x1a\n"
 
 
-def load_image():
-    here = Path(__file__).resolve().parent
-    blob = (here / "entry.png").read_bytes()
-    return blob
+def read_and_check():
+    data = SOURCE.read_bytes()
+    if data[:8] != SIGNATURE:
+        raise SystemExit("entry.png: bad PNG signature")
+    if data[12:16] != b"IHDR":
+        raise SystemExit("entry.png: missing IHDR chunk")
+    if len(data) > LIMIT_BYTES:
+        raise SystemExit("entry.png: over the 1 MiB limit")
+    if len(data) < 12 or data[-8:-4] != b"IEND":
+        raise SystemExit("entry.png: missing IEND trailer")
+    width = int.from_bytes(data[16:20], "big")
+    height = int.from_bytes(data[20:24], "big")
+    if width > LIMIT_SIDE or height > LIMIT_SIDE:
+        raise SystemExit("entry.png: over the 1024x1024 limit")
+    return data, width, height
 
 
-def check_blob(blob):
-    if len(blob) < 24:
-        raise ValueError("entry.png is too short to be a PNG file")
-    if blob[:8] != PNG_MAGIC:
-        raise ValueError("entry.png is not a PNG file")
-    if blob[12:16] != b"IHDR":
-        raise ValueError("entry.png has no IHDR chunk")
-    if len(blob) > MAX_BYTES:
-        raise ValueError("entry.png is over the 1 MiB limit")
-    wide = int.from_bytes(blob[16:20], "big")
-    tall = int.from_bytes(blob[20:24], "big")
-    if wide > MAX_SIDE or tall > MAX_SIDE:
-        raise ValueError("entry.png is larger than 1024x1024")
-    return wide, tall
-
-
-def run():
-    blob = load_image()
-    wide, tall = check_blob(blob)
-    target = Path(os.environ.get("MAKEFUN_OUTPUT_DIR", "/output"))
-    target.mkdir(parents=True, exist_ok=True)
-    dest = target / "entry.png"
-    dest.write_bytes(blob)
-    again = dest.read_bytes()
-    if sha256(again).hexdigest() != sha256(blob).hexdigest():
-        print("output bytes differ from source", file=sys.stderr)
+def main():
+    data, width, height = read_and_check()
+    out_dir = Path(os.environ.get("MAKEFUN_OUTPUT_DIR", "/output"))
+    out_dir.mkdir(parents=True, exist_ok=True)
+    target = out_dir / "entry.png"
+    target.write_bytes(data)
+    written = target.read_bytes()
+    if hashlib.sha256(written).hexdigest() != hashlib.sha256(data).hexdigest():
+        print("error: output does not match entry.png", file=sys.stderr)
         return 1
-    print(f"wrote {dest} ({len(blob)} bytes, {wide}x{tall}, "
-          f"sha256 {sha256(blob).hexdigest()[:12]})")
+    digest = hashlib.sha256(data).hexdigest()
+    print(f"wrote {target} — {len(data)} bytes, {width}x{height}, "
+          f"sha256 {digest[:16]}")
     return 0
 
 
 if __name__ == "__main__":
-    sys.exit(run())
+    sys.exit(main())
