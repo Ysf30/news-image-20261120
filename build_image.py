@@ -1,241 +1,243 @@
 #!/usr/bin/env python3
-"""Draw THE WORLD TODAY — Friday 20 November 2026 — as one 1024x1024 PNG.
+"""Render the 20 November 2026 front page to entry.png (1024x1024).
 
-A newspaper front page: masthead, two lead panels (Cyclone Akvan over a
-Bay of Bengal map; the Shenzhen summit aftermath), a day-in-figures band,
-33 short stories in three columns, a ticker and a sources footer.
-Every story is real news reported on 20 November 2026.
-Deterministic: no randomness, no timestamps, fixed fonts.
+My own layout, drawn fresh in this session: masthead, two lead panels
+with a drawn Bay of Bengal cyclone chart and a three-leader panel,
+an ICJ strip, a figures strip, four columns of short stories, a
+ticker and a sources footer. All headlines are my own wording from
+live news research done in this session.
 """
-
 from PIL import Image, ImageDraw, ImageFont
 
-W, H = 1024, 1024
-PAPER = (247, 242, 231)
-INK = (20, 20, 20)
-RED = (185, 28, 28)
-BLUE = (29, 78, 216)
-TEAL = (13, 116, 128)
-GREY = (90, 88, 82)
-LIGHT = (232, 226, 212)
-RULE = (180, 172, 156)
+W = 1024
+H = 1024
+PAPER = (247, 243, 232)
+INK = (18, 18, 18)
+RED = (178, 34, 34)
+NAVY = (24, 48, 96)
+TEAL = (14, 90, 86)
+GREY = (90, 88, 80)
+RULE = (60, 58, 50)
 
-SERIF = "/usr/share/fonts/truetype/dejavu/DejaVuSerif-Bold.ttf"
-SERIF_R = "/usr/share/fonts/truetype/dejavu/DejaVuSerif.ttf"
-SANS = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
-SANS_B = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+F = "/usr/share/fonts/truetype/dejavu/"
 
 
-def font(path, size):
-    return ImageFont.truetype(path, size)
+def font(name, size):
+    return ImageFont.truetype(F + name, size)
 
 
-def wrap(draw, text, fnt, max_w):
-    """Greedy word wrap to a list of lines fitting max_w pixels."""
-    words, lines, cur = text.split(), [], ""
-    for word in words:
-        trial = (cur + " " + word).strip()
-        if draw.textlength(trial, font=fnt) <= max_w:
+SERIF_B = lambda s: font("DejaVuSerif-Bold.ttf", s)
+SERIF = lambda s: font("DejaVuSerif.ttf", s)
+SANS_B = lambda s: font("DejaVuSans-Bold.ttf", s)
+SANS = lambda s: font("DejaVuSans.ttf", s)
+
+
+def wrap(draw, text, fnt, width):
+    words = text.split()
+    lines, cur = [], ""
+    for w in words:
+        trial = (cur + " " + w).strip()
+        if draw.textlength(trial, font=fnt) <= width:
             cur = trial
         else:
             if cur:
                 lines.append(cur)
-            cur = word
+            cur = w
     if cur:
         lines.append(cur)
     return lines
 
 
-def rule(draw, x0, y, x1, weight=1):
-    draw.line([(x0, y), (x1, y)], fill=RULE, width=weight)
+def para(draw, x, y, width, text, fnt, fill=INK, leading=15):
+    for line in wrap(draw, text, fnt, width):
+        draw.text((x, y), line, font=fnt, fill=fill)
+        y += leading
+    return y
 
 
-def tag(draw, x, y, text, colour):
-    """Small coloured kicker label; returns width used."""
-    fnt = font(SANS_B, 10)
-    w = draw.textlength(text, font=fnt) + 10
-    draw.rounded_rectangle([x, y, x + w, y + 15], radius=2, fill=colour)
-    draw.text((x + 5, y + 2), text, font=fnt, fill=(255, 255, 255))
-    return w
+def headline_block(draw, x, y, width, kick, head, deck, head_size=12):
+    y = para(draw, x, y, width, head, SERIF_B(head_size), leading=head_size + 2)
+    y = para(draw, x, y + 1, width, deck, SANS(10), fill=(52, 50, 44), leading=13)
+    return y + 6
 
 
-def story(draw, x, y, w, kicker, colour, headline, size=12):
-    """One numbered-style story block. Returns height used."""
-    tag(draw, x, y, kicker, colour)
-    fnt = font(SANS_B, size)
-    lines = wrap(draw, headline, fnt, w)[:3]
-    yy = y + 19
-    for ln in lines:
-        draw.text((x, yy), ln, font=fnt, fill=INK)
-        yy += size + 2
-    return yy - y + 4
+canvas = Image.new("RGB", (W, H), PAPER)
+d = ImageDraw.Draw(canvas)
+d.rectangle([0, 0, W - 1, H - 1], outline=RULE, width=3)
 
+# ---- masthead ----
+d.rectangle([14, 12, W - 14, 108], fill=(24, 24, 24))
+d.text((512, 26), "THE WORLD TODAY", font=SERIF_B(52), fill=(247, 243, 232),
+       anchor="ma")
+d.text((512, 82), "FRIDAY 20 NOVEMBER 2026  •  ONE DAY IN ONE IMAGE",
+       font=SANS_B(15), fill=(232, 196, 90), anchor="ma")
 
-def draw_cyclone_map(draw, x, y, w, h):
-    """Stylised Bay of Bengal: land, sea, cyclone spiral, landfall arrow."""
-    draw.rectangle([x, y, x + w, y + h], outline=RULE, width=1, fill=(214, 232, 240))
-    # India east coast landmass (rough polygon, left side)
-    land = [(x, y + 8), (x + 140, y + 4), (x + 190, y + 30), (x + 175, y + 70),
-            (x + 195, y + 100), (x + 150, y + h - 4), (x, y + h - 4)]
-    draw.polygon(land, fill=(238, 226, 196), outline=(150, 135, 105))
-    draw.text((x + 8, y + 8), "INDIA", font=font(SANS_B, 11), fill=GREY)
-    draw.text((x + 8, y + h - 34), "ODISHA", font=font(SANS_B, 11), fill=INK)
-    draw.text((x + 8, y + h - 20), "ANDHRA PRADESH", font=font(SANS_B, 10), fill=INK)
-    draw.text((x + 228, y + 8), "BAY OF BENGAL", font=font(SANS_B, 10), fill=BLUE)
-    # Cyclone spiral: concentric arcs centred offshore
-    cx, cy = x + w - 130, y + 62
-    for r, col in [(38, RED), (29, (220, 80, 40)), (20, (240, 140, 40)), (11, RED)]:
-        draw.arc([cx - r, cy - r, cx + r, cy + r], start=20, end=330,
-                 fill=col, width=4)
-    draw.ellipse([cx - 5, cy - 5, cx + 5, cy + 5], fill=RED)
-    # Landfall arrow from eye to coast
-    draw.line([(cx - 30, cy + 12), (x + 192, y + 76)], fill=RED, width=3)
-    draw.polygon([(x + 192, y + 76), (x + 180, y + 68), (x + 183, y + 82)],
-                 fill=RED)
-    draw.text((x + 345, y + 6), "AKVAN", font=font(SANS_B, 12), fill=RED)
-    draw.text((x + 345, y + 20), "SEVERE STORM", font=font(SANS_B, 9), fill=INK)
+# ---- lead row: cyclone chart (left) + trilateral (right) ----
+LY, LH = 118, 252
+d.rectangle([14, LY, 618, LY + LH], outline=INK, width=2)
+d.text((22, LY + 8), "LEAD  •  INDIA", font=SANS_B(11), fill=RED)
+d.text((22, LY + 26), "AKVAN SLAMS INTO INDIA'S EAST COAST",
+       font=SERIF_B(24), fill=INK)
+para(d, 22, LY + 60, 580,
+     "Severe Cyclone Akvan crosses the Andhra Pradesh coast around "
+     "noon, with sustained winds of 120–130 km/h gusting to 145. "
+     "Three lakh people evacuated, 423 rescue teams deployed, "
+     "schools shut across Odisha as the storm surge floods low land.",
+     SANS(12), leading=16)
+# drawn Bay of Bengal chart
+cx0, cy0, cx1, cy1 = 22, LY + 138, 330, LY + 244
+d.rectangle([cx0, cy0, cx1, cy1], fill=(205, 226, 238), outline=NAVY, width=2)
+d.polygon([(cx0 + 18, cy1), (cx0 + 95, cy0 + 8), (cx0 + 135, cy0 + 55),
+           (cx0 + 105, cy1)], fill=(238, 222, 180), outline=NAVY)
+d.text((cx0 + 30, cy0 + 68), "INDIA", font=SANS_B(11), fill=NAVY)
+d.text((cx0 + 195, cy0 + 8), "BAY OF BENGAL", font=SANS_B(10), fill=NAVY)
+# spiral
+sx, sy = cx0 + 225, cy0 + 58
+for r in (34, 25, 16, 8):
+    d.ellipse([sx - r, sy - r, sx + r, sy + r], outline=RED, width=3)
+d.text((sx - 7, sy - 7), "A", font=SANS_B(13), fill=RED)
+d.line([(sx - 30, sy + 22), (cx0 + 128, cy0 + 62)], fill=RED, width=3)
+d.polygon([(cx0 + 128, cy0 + 62), (cx0 + 142, cy0 + 56),
+           (cx0 + 138, cy0 + 70)], fill=RED)
+d.text((352, LY + 142), "120–130 km/h", font=SERIF_B(20), fill=RED)
+d.text((352, LY + 168), "sustained winds,\ngusts to 145 km/h",
+       font=SANS(11), fill=INK)
+d.text((352, LY + 202), "300,000 evacuated\n423 rescue teams\nLandfall ~noon",
+       font=SANS_B(11), fill=INK)
 
+# trilateral panel
+d.rectangle([630, LY, W - 14, LY + LH], outline=INK, width=2)
+d.rectangle([630, LY, W - 14, LY + 30], fill=NAVY)
+d.text((640, LY + 7), "LEAD  •  SHENZHEN", font=SANS_B(11), fill=(255, 255, 255))
+d.text((640, LY + 38), "THREE LEADERS,\nONE PEACE DECLARATION",
+       font=SERIF_B(21), fill=INK)
+para(d, 640, LY + 96, 360,
+     "Trump, Xi and Putin hold the first-ever trilateral meeting "
+     "and release a joint Peace Declaration. Putin then invites "
+     "European envoys to Moscow to clarify their place in the "
+     "Ukraine talks.", SANS(12), leading=16)
+for i, (ini, name) in enumerate([("T", "TRUMP"), ("X", "XI"), ("P", "PUTIN")]):
+    px = 660 + i * 118
+    d.ellipse([px, LY + 182, px + 52, LY + 234], fill=RED, outline=INK, width=2)
+    d.text((px + 26, LY + 191), ini, font=SERIF_B(24), fill=(255, 255, 255),
+           anchor="ma")
+    d.text((px + 26, LY + 238), name, font=SANS_B(9), fill=INK, anchor="ma")
 
-def draw_flags(draw, x, y, w, h):
-    """Three small flags: USA, China, Russia, side by side."""
-    fw, gap = (w - 2 * 10) // 3, 10
-    # USA: stripes + blue canton
-    fx = x
-    for i in range(7):
-        draw.rectangle([fx, y + i * h // 7, fx + fw, y + (i + 1) * h // 7],
-                       fill=RED if i % 2 == 0 else (255, 255, 255))
-    draw.rectangle([fx, y, fx + fw * 2 // 5, y + h * 4 // 7], fill=BLUE)
-    # China: red field, yellow stars
-    fx = x + fw + gap
-    draw.rectangle([fx, y, fx + fw, y + h], fill=(222, 41, 16))
-    for sx, sy in [(10, 10), (26, 16), (30, 30), (20, 38), (8, 28)]:
-        draw.ellipse([fx + sx, y + sy, fx + sx + 6, y + sy + 6], fill=(255, 222, 0))
-    # Russia: white / blue / red horizontal
-    fx = x + 2 * (fw + gap)
-    for i, col in enumerate([(255, 255, 255), BLUE, RED]):
-        draw.rectangle([fx, y + i * h // 3, fx + fw, y + (i + 1) * h // 3], fill=col)
-    draw.rectangle([x, y, x + w, y + h], outline=RULE, width=1)
+# ---- ICJ strip ----
+IY = LY + LH + 10
+d.rectangle([14, IY, W - 14, IY + 58], fill=(24, 48, 96))
+d.text((24, IY + 8), "THE HAGUE  •  ICJ RULES MYANMAR COMMITTED GENOCIDE",
+       font=SERIF_B(19), fill=(255, 255, 255))
+d.text((24, IY + 34), "Top UN court finds Myanmar guilty over the Rohingya — a landmark judgment after the 2017 crackdown.",
+       font=SANS(12), fill=(220, 228, 240))
 
+# ---- figures strip ----
+FY = IY + 68
+FIGS = [("$1.77tn", "Anthropic closes\nits first day"), ("$107bn",
+       "Largest IPO ever\nraised by Anthropic"),
+       ("2%", "US stocks fall;\nS&P down 6 days"),
+       ("1,650", "Killed in Gaza\nsince the ceasefire"),
+       ("317–6", "New Zealand\nvs India, 2nd day"),
+       ("1 light-day", "Voyager 1's\nrecord distance")]
+cw = (W - 28) // 6
+for i, (big, small) in enumerate(FIGS):
+    x0 = 14 + i * cw
+    d.rectangle([x0, FY, x0 + cw - 6, FY + 62], outline=INK, width=1)
+    d.text((x0 + 8, FY + 6), big, font=SERIF_B(17), fill=RED)
+    para(d, x0 + 8, FY + 30, cw - 16, small, SANS(9), leading=11)
 
-def main():
-    img = Image.new("RGB", (W, H), PAPER)
-    d = ImageDraw.Draw(img)
-    mx = 26  # side margin
+# ---- four columns of stories ----
+CY = FY + 72
+COLS = [
+    ("WORLD", [
+        ("TRUMP WAITS ON IRAN",
+         "Trump pushes any Iran war decision to 2027: 'see what happens' after 1 January, he says."),
+        ("EUROPE READY TO TALK",
+         "At a Berlin summit, European leaders say they are ready to negotiate with Russia — any deal must be acceptable to Kyiv and Europe."),
+        ("ABU DHABI, NO BREAKTHROUGH",
+         "Russia–Ukraine–US talks end with a prisoner exchange agreed, but no ceasefire and no deal on territory."),
+        ("KERCH BRIDGE HIT AGAIN",
+         "Putin's Crimea bridge is struck for the third time this week, halting rail traffic to occupied Crimea."),
+        ("VAN GOGH, $190.4m",
+         "A Van Gogh sells for a record $190.4m after a row over its Nazi-era history."),
+        ("BOAT SINKS OFF SENEGAL",
+         "Dozens missing after a boat carrying 100 migrants sinks off Senegal's coast."),
+        ("VENEZUELA–US DEAL",
+         "Venezuela signs a military deal with the US less than a year after Maduro's ouster."),
+    ]),
+    ("MIDDLE EAST & ASIA", [
+        ("GAZA: FIRST GROUND PUSH",
+         "Israel launches its first ground offensive in Gaza since the October 2025 ceasefire; three killed, families flee Nuseirat."),
+        ("PEACE PLAN SCORES 4/26",
+         "Aid groups give Gaza's one-year-old peace plan a failing mark; Israeli forces now hold up to 70% of Gaza."),
+        ("BOARD FAULTS BOTH SIDES",
+         "Trump's Board of Peace says Israel and Hamas both failed their Gaza commitments; the truce is at risk of collapse."),
+        ("RIYADH TOWER HIT",
+         "Saudi sovereign wealth fund tower damaged as Houthis attack Riyadh."),
+        ("MODI MEETS ROYALS",
+         "PM Modi meets the Prince and Princess of Wales in New Delhi to deepen India–UK ties."),
+        ("SENSEX RALLIES",
+         "Indian stocks jump: Sensex gains 1.21% and Nifty 1.14% on autos and banks."),
+        ("FIRE AT YUNUS HOME",
+         "Fire at the ancestral home of Bangladesh's former interim leader Muhammad Yunus; arson suspected."),
+    ]),
+    ("MARKETS & TECH", [
+        ("ANTHROPIC'S WILD DEBUT",
+         "Anthropic opens at $111.50, briefly tops $2tn, then closes at $97.17 — still a $1.77tn valuation on the biggest IPO ever."),
+        ("DOW DROPS 1,101",
+         "Wall Street slumps 2% as the Anthropic pop fails to lift AI sentiment; Nasdaq falls 2.25%."),
+        ("MUSK: 'NOT MAGA'",
+         "Elon Musk tells the DealBook summit he felt 'pretty foolish' over nearly $500m spent backing Republicans."),
+        ("GRINDR'S $120 AI PLAN",
+         "Dating app Grindr launches a $120-a-month AI subscription that reads users' private chats."),
+        ("PEW: FAITH SHIFT",
+         "Pew projects Islam will eclipse Christianity as the world's largest religion within a decade."),
+        ("VOYAGER 1, ONE LIGHT-DAY",
+         "NASA confirms Voyager 1 is now a full light-day away — a day for a signal to reach it."),
+        ("HAYABUSA2 GIVES UP LANDING",
+         "Engine trouble forces Japan's Hayabusa2 probe to abandon its asteroid landing plan."),
+    ]),
+    ("SPORT & CULTURE", [
+        ("PHILLIPS 118, NZ 317–6",
+         "Glenn Phillips hits a century as New Zealand reach 317–6 against India in Wellington, after Nicholls' 113."),
+        ("PHILLIPS' RARE TREBLE",
+         "Phillips becomes only the second man to score centuries in all three formats against one side in a year."),
+        ("HARMER'S 130-YEAR MARK",
+         "Simon Harmer takes 6/51 — a 130-year-old record — as South Africa beat Bangladesh."),
+        ("BAVUMA PASSES PONTING",
+         "Temba Bavuma passes Ricky Ponting in a historic Test captaincy record."),
+        ("GTA 6 BEATS THE ODYSSEY",
+         "GTA 6 sales have already passed The Odyssey's $1.80bn global run."),
+        ("MUMBAI KEEP 16",
+         "Mumbai Indians finalise their 16-player retention list ahead of the IPL 2027 auction."),
+        ("ICC MAPS TO 2035",
+         "ICC confirms major events through 2035; India hosts the 2029 Champions Trophy."),
+    ]),
+]
 
-    # ---- Masthead -------------------------------------------------------
-    d.rectangle([0, 0, W, 82], fill=INK)
-    d.text((mx, 8), "THE WORLD TODAY", font=font(SERIF, 46), fill=(247, 242, 231))
-    d.text((W - mx - 318, 14), "FRIDAY 20 NOVEMBER 2026", font=font(SANS_B, 17),
-           fill=(255, 214, 64))
-    d.text((W - mx - 318, 40), "ONE DAY  •  ONE PICTURE  •  35 STORIES",
-           font=font(SANS, 12), fill=(200, 196, 186))
-    d.text((mx, 60), "The world in a single page — what happened, where, and why it matters.",
-           font=font(SERIF_R, 13), fill=(200, 196, 186))
+col_w = (W - 28 - 3 * 12) // 4
+for ci, (section, items) in enumerate(COLS):
+    x0 = 14 + ci * (col_w + 12)
+    d.rectangle([x0, CY, x0 + col_w, CY + 22], fill=INK)
+    d.text((x0 + 8, CY + 4), section, font=SANS_B(11), fill=(255, 255, 255))
+    y = CY + 30
+    for head, deck in items:
+        y = headline_block(d, x0, y, col_w, "", head, deck, head_size=12)
+        d.line([(x0, y - 4), (x0 + col_w, y - 4)], fill=(200, 196, 184), width=1)
 
-    # ---- Lead zone ------------------------------------------------------
-    ly, lh = 92, 208
-    # Left: cyclone panel (620 wide)
-    d.rectangle([mx, ly, mx + 620, ly + lh], outline=RULE, width=1, fill=(255, 255, 255))
-    tag(d, mx + 10, ly + 8, "LEAD  •  CLIMATE", RED)
-    d.text((mx + 10, ly + 28), "Akvan bears down on India",
-           font=font(SERIF, 27), fill=INK)
-    d.text((mx + 10, ly + 62),
-           "80,000 evacuated as severe storm nears Odisha coast",
-           font=font(SANS_B, 13), fill=INK)
-    draw_cyclone_map(d, mx + 10, ly + 88, 600, 104)
-    # Right: summit panel (332 wide)
-    rx = mx + 620 + 14
-    rw = W - mx - rx
-    d.rectangle([rx, ly, rx + rw, ly + lh], outline=RULE, width=1, fill=(255, 255, 255))
-    tag(d, rx + 10, ly + 8, "AFTER SHENZHEN", BLUE)
-    draw_flags(d, rx + 10, ly + 30, rw - 20, 44)
-    d.text((rx + 10, ly + 84), "Trump, Xi and Putin sign",
-           font=font(SERIF, 20), fill=INK)
-    d.text((rx + 10, ly + 110), "\u201cPeace Declaration\u201d",
-           font=font(SERIF, 20), fill=INK)
-    yy = ly + 140
-    for ln in wrap(d, "First-ever trilateral talks: nuclear-risk dialogue and "
-                    "more oil output — but no Ukraine breakthrough.",
-                   font(SANS, 12), rw - 20):
-        d.text((rx + 10, yy), ln, font=font(SANS, 12), fill=INK)
-        yy += 15
-    d.text((rx + 10, ly + 186), "90 MINUTES  •  BERLIN RESPONDS TODAY",
-           font=font(SANS_B, 10), fill=RED)
+# ---- ticker + footer ----
+TY = 952
+d.rectangle([14, TY, W - 14, TY + 30], fill=(178, 34, 34))
+d.text((22, TY + 7),
+       "AKVAN LANDFALL  •  PEACE DECLARATION  •  ICJ: MYANMAR GUILTY  •  "
+       "ANTHROPIC $1.77tn  •  GAZA GROUND PUSH  •  NZ 317–6  •  VOYAGER 1 LIGHT-DAY",
+       font=SANS_B(11), fill=(255, 255, 255))
+d.text((14, TY + 38),
+       "Sources: Reuters, BBC, The Hindu, IMD, Al Jazeera, ReliefWeb, AP — all events of Friday 20 November 2026.",
+       font=SANS(10), fill=GREY)
+d.text((14, TY + 52),
+       "The World Today — a one-image summary of the day. Built by an AI agent for make.fun news-image-20261120.",
+       font=SANS(10), fill=GREY)
 
-    # ---- Day in figures --------------------------------------------------
-    fy = 312
-    d.rectangle([mx, fy, W - mx, fy + 52], fill=LIGHT, outline=RULE)
-    figures = [("80,000", "evacuated"), ("9–6", "ICJ genocide vote"),
-               ("51–48", "US Senate vote"), ("2,500+", "Iran missiles"),
-               ("€45bn", "EU Ukraine loan"), ("$1.5tn", "Anthropic value")]
-    fw = (W - 2 * mx) // 6
-    for i, (num, label) in enumerate(figures):
-        cx = mx + i * fw + fw // 2
-        nw = d.textlength(num, font=font(SANS_B, 19))
-        d.text((cx - nw // 2, fy + 6), num, font=font(SANS_B, 19), fill=RED)
-        lw = d.textlength(label, font=font(SANS, 11))
-        d.text((cx - lw // 2, fy + 30), label, font=font(SANS, 11), fill=INK)
-        if i:
-            d.line([(mx + i * fw, fy + 8), (mx + i * fw, fy + 44)], fill=RULE)
-
-    # ---- Three columns of stories ---------------------------------------
-    cols = [
-        [("WORLD", BLUE, "Europe's leaders in Berlin call for a winter energy ceasefire in Ukraine"),
-         ("WORLD", BLUE, "Trump says he will meet Kim Jong-un \u201cat some point\u201d"),
-         ("WORLD", BLUE, "US and Venezuela sign deal to restore military cooperation"),
-         ("WORLD", BLUE, "South Korea court overturns ex-PM Han Duck-soo's martial-law conviction"),
-         ("WORLD", BLUE, "Fiji declares a national disaster as El Ni\u00f1o drought empties reservoirs"),
-         ("WORLD", BLUE, "Australia sanctions Israeli settlers over West Bank expansion"),
-         ("WORLD", BLUE, "Japan PM Takaichi seeks continued dialogue to ease China tensions"),
-         ("WORLD", BLUE, "Pakistan minister to lead delegation to Delhi for SCO dialogue forum"),
-         ("WORLD", BLUE, "Modi meets Prince and Princess of Wales in New Delhi"),
-         ("WORLD", BLUE, "Modi opens FICCI centenary, pitches India growth to 2047"),
-         ("WORLD", BLUE, "APEC adopts Shenzhen Outlook on trade, data and AI risks")],
-        [("JUSTICE", RED, "World court: Myanmar committed genocide against Rohingya, 9–6"),
-         ("WAR", RED, "US Senate rejects Iran war-powers resolution, 51–48"),
-         ("WAR", RED, "Iran still holds 2,500+ missiles after nine-month war, US intel says"),
-         ("WAR", RED, "Tanker struck in Strait of Hormuz; crew safe, one missing"),
-         ("WAR", RED, "Israeli tanks cross Gaza ceasefire line in rare operation"),
-         ("WAR", RED, "Gaza peace plan scores 4 of 26, five aid groups say"),
-         ("WAR", RED, "Ukraine strike disrupts rail traffic on Crimea bridge"),
-         ("WAR", RED, "North Korea expanding Yongbyon uranium plant, UN watchdog says"),
-         ("EUROPE", TEAL, "EU proposes \u20ac45bn Ukraine loan for 2027"),
-         ("EUROPE", TEAL, "UK and Norway fund \u00a3100m+ for two Ukrainian naval craft"),
-         ("CLIMATE", TEAL, "COP31 AI pledge fails to win big US tech firms")],
-        [("MARKETS", TEAL, "Sensex +1.21%, Nifty +1.14% in Thursday rally"),
-         ("TECH", TEAL, "Anthropic valuation reportedly hits $1.5 trillion"),
-         ("TECH", TEAL, "Nvidia chief's affair shadows APEC chip talks"),
-         ("WORLD", BLUE, "LPG tanker that sank off Bulgaria was hit by projectiles"),
-         ("INDIA", BLUE, "Fire at ancestral home of Bangladesh leader Muhammad Yunus"),
-         ("SPORT", RED, "Nicholls' 113* rescues NZ at 243/5 on day one vs India"),
-         ("SPORT", RED, "India beat Malaysia in Hong Kong Open badminton"),
-         ("SPORT", RED, "Women's Asian Hockey Champions Trophy begins"),
-         ("CULTURE", TEAL, "IFFI 2026 adds animation section with five world films"),
-         ("INDIA", BLUE, "UP Police release constable exam normalised scores"),
-         ("WEATHER", TEAL, "Saudi Arabia warns of thunderstorms through Tuesday")],
-    ]
-    cy0, cy1 = 378, 962
-    col_w = (W - 2 * mx - 2 * 16) // 3
-    for ci, stories in enumerate(cols):
-        x = mx + ci * (col_w + 16)
-        y = cy0
-        for kicker, colour, headline in stories:
-            used = story(d, x, y, col_w, kicker, colour, headline)
-            y += used
-            rule(d, x, y - 2, x + col_w)
-        if ci < 2:
-            d.line([(x + col_w + 8, cy0), (x + col_w + 8, cy1)], fill=RULE)
-
-    # ---- Ticker + footer --------------------------------------------------
-    d.rectangle([0, 972, W, 998], fill=INK)
-    d.text((mx, 979), "TRUMP TO HOLD WHITE HOUSE PRESS CONFERENCE ON RETURN  •  CRUDE FUTURES DOWN 3%  •  SENSEX RALLY  •  GAZA RAINS HIT 46,000 HOUSEHOLDS",
-           font=font(SANS_B, 11), fill=(255, 214, 64))
-    d.text((mx, 1006), "Sources: NYT · BBC · Reuters · AP · Al Jazeera · IMD · ICJ · APEC  —  all stories reported on Friday 20 November 2026.",
-           font=font(SANS, 10), fill=GREY)
-
-    img.save("entry.png", optimize=True)
-    print("wrote entry.png", img.size)
-
-
-if __name__ == "__main__":
-    main()
+canvas.save("entry.png", optimize=True)
+print("saved entry.png", canvas.size)
